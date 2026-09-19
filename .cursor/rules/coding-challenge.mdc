@@ -1,0 +1,46 @@
+---
+description: HTGF Erstgespräch coding challenge, product goals, and interview quality
+alwaysApply: true
+---
+
+# Erstgespräch — product background
+
+Web-based voice agent: a founder speaks in the browser; the agent interviews until it can store a structured first-meeting memo. The live browser demo matters more than extra infrastructure.
+
+## Original coding challenge (source of truth)
+
+Aufgabe: Baue einen web-basierten Voice-Agent, der ein Erstgespräch mit einem Startup führt. Der Nutzer spricht über das Mikrofon im Browser, der Agent versteht das Gesprochene, generiert per KI eine Antwort und spricht sie zurück.
+
+Rahmen: Ein Gründer stellt sein Startup vor, der Agent führt durch das Gespräch und fragt nach, bis er ein belastbares Bild hat. Also Team, Produkt und Stand der Entwicklung, Traktion, Markt und Wettbewerb, Finanzierungsbedarf und geplante Runde. Am Ende fasst der Agent zusammen und legt das Ergebnis strukturiert ab.
+
+Tech-Stack ist frei. AI-Coding-Tools sind erwünscht.
+
+Anforderungen:
+
+- **Voice-Erfahrung im Browser.** Geringe Latenz: Antworten kommen schnell, idealerweise unter 1 bis 2 Sekunden vom Ende der Eingabe bis zum Beginn der Audioantwort. Natürliche Sprachausgabe. Start/Stopp-Steuerung per Button.
+- **Gesprächsführung.** Der Agent fragt nach, statt nur zu antworten. Wenn eine Angabe fehlt oder vage bleibt, hakt er einmal nach. Roter Faden: was schon geklärt ist, nicht wiederholen.
+- **Transkript & Gesprächs-Historie.** Gesprächsverlauf sichtbar (wer hat was gesagt). Vergangene Gespräche mit Zeitstempel einsehbar.
+- **Konfigurierbarkeit.** Mindestens 2 Einstellungen anpassbar (z. B. Name des Agents, Tonalität, Sprache, System-Prompt, Fragenkatalog).
+- **Bonus.** Tool Calling (Gesprächsergebnis strukturiert speichern: Startup, Sektor, Stage, Team, Traktion, Finanzierungsbedarf, nächster Schritt; oder Websuche). Streaming-Antworten. Gutes UI/UX.
+
+Das Gespräch: Live im Browser zeigen. Vorgehen, Entscheidungen und Kompromisse erklären. Denken und Arbeiten zählen mehr als der Stack.
+
+Hilfreiche Tools nur als Orientierung: LiveKit/VAPI, Deepgram/AssemblyAI, ElevenLabs/OpenAI TTS/Google TTS, GPT/Claude/Gemini.
+
+## Stack used here
+
+Next.js + Deepgram Voice Agent (Flux STT, Claude via Deepgram) + ElevenLabs TTS. No LiveKit. Persistence is SQLite/Turso. Audio does not pass through Vercel.
+
+Bonus used: `save_intake`, pre-call Tavily briefing, optional `search_web`, streaming audio, careful UI.
+
+## Conversation quality (from real calls)
+
+- Use the **form** as ground truth: exact company spelling, **first name only**. Never echo ASR guesses (`ichiga`, `Proceed`).
+- Before the call, search the form company name. If there is a real product inference, the greeting confirms it. If nothing was found, say so and ask what they do — never confirm a “no information” claim. Web notes are not ground truth — the founder is.
+- Memo (`save_intake`) must use the form company name throughout, including summary. Canonicalise on the server.
+- German sessions: fully German pronunciation. No English discourse markers (`Okay`, `Hi`, `Cool`). Lock ElevenLabs `language_code` to `de`.
+- Boost STT with Flux **keyterms**: company, names, `Pre-Seed`, `Seed`, `Series A`, `HTGF`.
+- After asking about the round, treat Proceed/Preceed/Pri-Seed as **Pre-Seed**.
+- One spoken turn = short acknowledgement + **one** question. Do not skip **next step**. Do not invent it.
+- After the next step, say the required picture is complete, then offer **one** optional extra. After that answer — add or decline — `save_intake` immediately. Do not ask again. Do not follow up on the extra. Store it in `additionalInfo` (empty if they decline).
+- Do not enable Flux eager EOT for this interview: it caused missing user turns and double agent replies.
