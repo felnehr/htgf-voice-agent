@@ -3,7 +3,7 @@ import { GATE_COOKIE, isValidGateValue } from "~/lib/auth";
 
 const PUBLIC_PATHS = new Set(["/enter", "/api/pin"]);
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (PUBLIC_PATHS.has(pathname)) {
     return NextResponse.next();

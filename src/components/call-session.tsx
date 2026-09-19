@@ -10,6 +10,7 @@ import {
   useAgentPlayer,
   useAgentState,
   type AgentSettingsObject,
+  type ConversationEntry,
 } from "@deepgram/react";
 import { MicIcon, MicOffIcon, PhoneOffIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -25,7 +26,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { firstName } from "~/lib/names";
 import { intakeSchema, type Caller, type Intake, type Language } from "~/lib/types";
 
-function lastAssistantText(conversation: { role: string; content: string }[]): string {
+function lastAssistantText(conversation: ConversationEntry[]): string {
   const turns = liveTurns(conversation);
   for (let i = turns.length - 1; i >= 0; i--) {
     const turn = turns[i];
