@@ -4,6 +4,7 @@ import { useState } from "react";
 import { IntakeCard } from "~/components/intake-card";
 import { MemoExportButton } from "~/components/memo-export-button";
 import { Button } from "~/components/ui/button";
+import { canonicalizeTranscriptText } from "~/lib/intake";
 import type { Intake, Language } from "~/lib/types";
 import { cn } from "~/lib/utils";
 
@@ -139,7 +140,9 @@ function TranscriptList({
           <span className="text-xs font-medium text-muted-foreground">
             {row.role === "user" ? callerName : agentName}
           </span>
-          <p className="text-[0.95rem] leading-relaxed">{row.content}</p>
+          <p className="text-[0.95rem] leading-relaxed">
+            {canonicalizeTranscriptText(row.content)}
+          </p>
         </li>
       ))}
     </ol>

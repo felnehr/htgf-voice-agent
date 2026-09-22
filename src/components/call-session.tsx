@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import {
   AgentProvider,
   useAgentClientTool,
@@ -25,6 +25,15 @@ import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { firstName } from "~/lib/names";
 import { intakeSchema, type Caller, type Intake, type Language } from "~/lib/types";
+
+function transcriptPayload(entries: ConversationEntry[]) {
+  return liveTurns(entries).map((entry) => ({
+    id: entry.id,
+    role: entry.role === "user" ? ("user" as const) : ("assistant" as const),
+    content: entry.content,
+    createdAt: new Date(entry.timestamp).toISOString(),
+  }));
+}
 
 function lastAssistantText(conversation: ConversationEntry[]): string {
   const turns = liveTurns(conversation);
@@ -87,6 +96,11 @@ export function CallSession({
   const [connectError, setConnectError] = useState<string | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
   const prepMicRef = useRef<MediaStream | null>(null);
+  const endPayloadRef = useRef<{
+    messages: ReturnType<typeof transcriptPayload>;
+    totalLatencySeconds: number | null;
+  }>({ messages: [], totalLatencySeconds: null });
+  const endedOnUnloadRef = useRef(false);
 
   const releasePrepMic = () => {
     prepMicRef.current?.getTracks().forEach((track) => track.stop());
@@ -156,6 +170,21 @@ export function CallSession({
       cancelled = true;
     };
   }, [conversationId, language]);
+
+  useEffect(() => {
+    const flushOnLeave = () => {
+      if (endedOnUnloadRef.current) return;
+      endedOnUnloadRef.current = true;
+      void fetch(`/api/conversations/${conversationId}/end`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(endPayloadRef.current),
+        keepalive: true,
+      });
+    };
+    window.addEventListener("pagehide", flushOnLeave);
+    return () => window.removeEventListener("pagehide", flushOnLeave);
+  }, [conversationId]);
 
   if (error || micError) {
     return (
@@ -244,8 +273,15 @@ export function CallSession({
         latency={latency}
         connectError={connectError}
         onClearConnectError={() => setConnectError(null)}
-        onEnded={onEnded}
+        onEnded={(intake) => {
+          endedOnUnloadRef.current = true;
+          onEnded(intake);
+        }}
+        onLeaving={() => {
+          endedOnUnloadRef.current = true;
+        }}
         onMicReady={releasePrepMic}
+        endPayloadRef={endPayloadRef}
       />
     </AgentProvider>
     </div>
@@ -261,7 +297,9 @@ function CallRoom({
   connectError,
   onClearConnectError,
   onEnded,
+  onLeaving,
   onMicReady,
+  endPayloadRef,
 }: {
   conversationId: string;
   caller: Caller;
@@ -271,7 +309,12 @@ function CallRoom({
   connectError: string | null;
   onClearConnectError: () => void;
   onEnded: (intake: Intake | null) => void;
+  onLeaving?: () => void;
   onMicReady?: () => void;
+  endPayloadRef: MutableRefObject<{
+    messages: ReturnType<typeof transcriptPayload>;
+    totalLatencySeconds: number | null;
+  }>;
 }) {
   const { start, stop, isConnecting, isConnected } = useAgentState();
   const { mode } = useAgentMode();
@@ -361,20 +404,25 @@ function CallRoom({
   }, [getInputVolume, getOutputVolume, mode]);
 
   const persistTurns = (turns: ReturnType<typeof liveTurns>) => {
-    if (turns.length === 0) return;
+    const messages = transcriptPayload(turns);
+    endPayloadRef.current = {
+      messages,
+      totalLatencySeconds: latency,
+    };
+    if (messages.length === 0) return;
     void fetch(`/api/conversations/${conversationId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: turns.map((entry) => ({
-          id: entry.id,
-          role: entry.role,
-          content: entry.content,
-          createdAt: new Date(entry.timestamp).toISOString(),
-        })),
-      }),
+      body: JSON.stringify({ messages }),
     });
   };
+
+  useEffect(() => {
+    endPayloadRef.current = {
+      messages: transcriptPayload(conversation),
+      totalLatencySeconds: latency,
+    };
+  }, [conversation, endPayloadRef, latency]);
 
   useEffect(() => {
     const turns = liveTurns(conversation);
@@ -387,15 +435,34 @@ function CallRoom({
   const hangUp = async (result?: Intake | null) => {
     if (endingRef.current) return;
     endingRef.current = true;
+    onLeaving?.();
     setEnding(true);
+    const messages = transcriptPayload(conversation);
+    endPayloadRef.current = {
+      messages,
+      totalLatencySeconds: latency,
+    };
     persistTurns(liveTurns(conversation));
     stop();
-    await fetch(`/api/conversations/${conversationId}/end`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ totalLatencySeconds: latency }),
-    });
-    onEnded(result !== undefined ? result : intakeRef.current);
+    let drafted: Intake | null = null;
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/end`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          totalLatencySeconds: latency,
+          messages,
+        }),
+        keepalive: true,
+      });
+      if (response.ok) {
+        const body = (await response.json()) as { intake?: Intake | null };
+        drafted = body.intake ?? null;
+      }
+    } catch {
+      drafted = null;
+    }
+    onEnded(result !== undefined ? result : intakeRef.current ?? drafted);
   };
 
   useEffect(() => {

@@ -69,6 +69,18 @@ function restoreRoundTerms(text: string): string {
   );
 }
 
+// Prompted letter-by-letter for German TTS ("Ha, Te, Ge, Ef") and English
+// ("H-T-G-F"). Same text is the transcript — fold it back to the acronym.
+function restoreHtgf(text: string): string {
+  return text
+    .replace(/\bHa[\s,.-]+Te[\s,.-]+Ge[\s,.-]+Ef\b/gi, "HTGF")
+    .replace(/\bH(?:\s*[.-]\s*T)(?:\s*[.-]\s*G)(?:\s*[.-]\s*F)\b/g, "HTGF");
+}
+
+export function canonicalizeTranscriptText(text: string): string {
+  return restoreHtgf(text);
+}
+
 function canonicalizeRound(round: string): string {
   const trimmed = round.trim();
   if (!trimmed) return trimmed;
@@ -80,7 +92,8 @@ function canonicalizeRound(round: string): string {
 
 export function canonicalizeIntake(intake: Intake, caller: Caller): Intake {
   const company = caller.company.trim();
-  const rewrite = (value: string) => restoreRoundTerms(restoreCompanyName(value, company));
+  const rewrite = (value: string) =>
+    restoreHtgf(restoreRoundTerms(restoreCompanyName(value, company)));
   return {
     startup: company || rewrite(intake.startup),
     sector: rewrite(intake.sector),

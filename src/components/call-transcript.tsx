@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ConversationEntry } from "@deepgram/react";
+import { canonicalizeTranscriptText } from "~/lib/intake";
 import { cn } from "~/lib/utils";
 import type { Language } from "~/lib/types";
 
@@ -24,7 +25,10 @@ export const CALL_START_CUE = "[[call_start]]";
 export function liveTurns(entries: ConversationEntry[]): ConversationEntry[] {
   return coalesceTurns(
     entries.filter((entry) => entry.content.trim() !== CALL_START_CUE),
-  );
+  ).map((entry) => ({
+    ...entry,
+    content: canonicalizeTranscriptText(entry.content),
+  }));
 }
 
 export function CallTranscript({

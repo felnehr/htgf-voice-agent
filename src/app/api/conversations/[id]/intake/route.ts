@@ -1,10 +1,14 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import {
+  callerFromConversation,
+  writeCanonicalIntake,
+  writeIntake,
+} from "~/lib/conversation-store";
 import { getDb } from "~/lib/db";
-import { conversations, intakes } from "~/lib/db/schema";
-import { canonicalizeIntake } from "~/lib/intake";
+import { conversations } from "~/lib/db/schema";
 import { requireGate } from "~/lib/require-gate";
-import { intakeSchema, type Intake } from "~/lib/types";
+import { intakeSchema } from "~/lib/types";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -13,24 +17,6 @@ async function loadConversation(id: string) {
   return db.query.conversations.findFirst({
     where: eq(conversations.id, id),
   });
-}
-
-async function upsertIntake(conversationId: string, intake: Intake) {
-  const db = await getDb();
-  await db
-    .insert(intakes)
-    .values({
-      conversationId,
-      payload: JSON.stringify(intake),
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: intakes.conversationId,
-      set: {
-        payload: JSON.stringify(intake),
-        updatedAt: new Date(),
-      },
-    });
 }
 
 async function readIntake(request: Request) {
@@ -52,13 +38,11 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const intake = canonicalizeIntake(parsed.data, {
-    name: conversation.callerName,
-    email: conversation.callerEmail,
-    company: conversation.callerCompany,
-  });
-
-  await upsertIntake(id, intake);
+  const intake = await writeCanonicalIntake(
+    id,
+    parsed.data,
+    callerFromConversation(conversation),
+  );
   return NextResponse.json({ ok: true, intake });
 }
 
@@ -78,6 +62,6 @@ export async function PUT(request: Request, { params }: Params) {
   }
 
   const intake = parsed.data;
-  await upsertIntake(id, intake);
+  await writeIntake(id, intake);
   return NextResponse.json({ ok: true, intake });
 }
