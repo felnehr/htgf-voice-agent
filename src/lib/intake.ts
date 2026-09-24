@@ -69,8 +69,8 @@ function restoreRoundTerms(text: string): string {
   );
 }
 
-// Prompted letter-by-letter for German TTS ("Ha, Te, Ge, Ef") and English
-// ("H-T-G-F"). Same text is the transcript — fold it back to the acronym.
+// If speech still spells the fund acronym ("Ha, Te, Ge, Ef" / "H-T-G-F"),
+// fold that transcript text back to the acronym.
 function restoreHtgf(text: string): string {
   return text
     .replace(/\bHa[\s,.-]+Te[\s,.-]+Ge[\s,.-]+Ef\b/gi, "HTGF")

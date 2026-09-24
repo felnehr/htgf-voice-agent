@@ -303,12 +303,12 @@ export const DEFAULT_SCRIPT: AgentScript = {
     },
     team: {
       question: {
-        de: "Wer ist im Team, welche Rollen, welche relevante Herkunft?",
+        de: "Wer ist im Team, welche Rollen, welcher relevante Hintergrund?",
         en: "Who is on the team, which roles, what relevant background?",
       },
       depth: {
-        de: "Mindestens: allein oder Team, grobe Rollen. Wenn nur 'wir' ohne Namen oder Herkunft kommt, einmal nachhaken.",
-        en: "At least: solo or a team, rough roles. If you only get 'we' with no names or background, ask once.",
+        de: "Kopfzahl allein reicht nicht. Allein: eigene Rolle und Hintergrund — fehlt eins davon, einmal nachhaken. Team: grobe Rollen. Kommt nur 'wir' ohne Namen oder Hintergrund, einmal nachhaken. Nach 'allein' nicht fragen, wer sonst noch dabei ist.",
+        en: "Headcount alone is not enough. Solo: their own role and background — if either is missing, ask once. A team: rough roles. If you only get 'we' with no names or background, ask once. After they say they are alone, do not ask who else is on the team.",
       },
     },
     traction: {
@@ -394,6 +394,32 @@ function pickLocalized(
   };
 }
 
+// Saved settings keep whatever was stored, including an old default. These
+// sentences are the previous Team default; treat them as unset so the current
+// bar (role and Hintergrund, including for solo) is what the call actually uses.
+const STALE_TEAM_QUESTION_DE = "Wer ist im Team, welche Rollen, welche relevante Herkunft?";
+const STALE_TEAM_DEPTH_DE =
+  "Mindestens: allein oder Team, grobe Rollen. Wenn nur 'wir' ohne Namen oder Herkunft kommt, einmal nachhaken.";
+const STALE_TEAM_DEPTH_EN =
+  "At least: solo or a team, rough roles. If you only get 'we' with no names or background, ask once.";
+
+function withoutStaleTeamDefault(
+  picked: LocalizedText,
+  fallback: LocalizedText,
+  part: "question" | "depth",
+): LocalizedText {
+  if (part === "question") {
+    return {
+      de: picked.de.trim() === STALE_TEAM_QUESTION_DE ? fallback.de : picked.de,
+      en: picked.en,
+    };
+  }
+  return {
+    de: picked.de.trim() === STALE_TEAM_DEPTH_DE ? fallback.de : picked.de,
+    en: picked.en.trim() === STALE_TEAM_DEPTH_EN ? fallback.en : picked.en,
+  };
+}
+
 function pickOptionalLocalized(
   value: { de?: string; en?: string } | undefined,
 ): LocalizedText {
@@ -408,11 +434,14 @@ export function mergeScript(input?: AgentScriptInput): AgentScript {
     interviewFieldKeys.map((key) => {
       const incoming = input?.fields?.[key];
       const fallback = DEFAULT_SCRIPT.fields[key];
+      const question = pickLocalized(incoming?.question, fallback.question);
+      const depth = pickLocalized(incoming?.depth, fallback.depth);
       return [
         key,
         {
-          question: pickLocalized(incoming?.question, fallback.question),
-          depth: pickLocalized(incoming?.depth, fallback.depth),
+          question:
+            key === "team" ? withoutStaleTeamDefault(question, fallback.question, "question") : question,
+          depth: key === "team" ? withoutStaleTeamDefault(depth, fallback.depth, "depth") : depth,
         },
       ];
     }),

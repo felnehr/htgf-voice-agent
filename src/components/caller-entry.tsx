@@ -135,8 +135,8 @@ export function CallerEntry({
           </h1>
           <p className="font-serif max-w-lg text-lg leading-snug text-muted-foreground">
             {german
-              ? `Gesprochenes Erstgespräch im Browser, etwa zehn Minuten. Keine Folien. Hab ein paar Fakten bereit — ${settings.agentName} legt daraus ein Memo an.`
-              : `A spoken first meeting in the browser, about ten minutes. No slides. Have a few facts ready — ${settings.agentName} files them as a memo.`}
+              ? `Gesprochenes Erstgespräch im Browser, fünf bis zehn Minuten. Keine Folien. Hab ein paar Fakten bereit — ${settings.agentName} legt daraus ein Memo an.`
+              : `A spoken first meeting in the browser, five to ten minutes. No slides. Have a few facts ready — ${settings.agentName} files them as a memo.`}
           </p>
         </div>
 
@@ -147,8 +147,8 @@ export function CallerEntry({
               </h2>
               <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
                 {german
-                  ? "Nicht auswendig. Ungefähre Zahlen reichen. Wenn etwas fehlt, sag es einfach."
-                  : "Not from memory. Rough numbers are enough. If something is missing, just say so."}
+                  ? "Ungefähre Zahlen reichen. Wenn etwas fehlt, sag es einfach."
+                  : "Rough numbers are enough. If something is missing, just say so."}
               </p>
             </div>
             <dl className="max-w-lg">

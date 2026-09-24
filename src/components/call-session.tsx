@@ -45,7 +45,7 @@ function lastAssistantText(conversation: ConversationEntry[]): string {
 }
 
 function isClosingThanks(text: string): boolean {
-  return /(danke für das gespräch|ich habe die angaben|recorded your details|thanks for the (call|conversation))/i.test(
+  return /(danke für das gespräch|ich speichere das memo|save the memo|thank you for the call|thanks for the (call|conversation)|ich habe die angaben|recorded your details)/i.test(
     text,
   );
 }
@@ -95,6 +95,7 @@ export function CallSession({
   const [micError, setMicError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
+  const [started, setStarted] = useState(false);
   const prepMicRef = useRef<MediaStream | null>(null);
   const endPayloadRef = useRef<{
     messages: ReturnType<typeof transcriptPayload>;
@@ -199,9 +200,15 @@ export function CallSession({
     );
   }
 
-  if (!agent) {
+  if (!agent || !started) {
     return (
-      <CallPrep caller={caller} language={language} agentName={agentName} />
+      <CallPrep
+        caller={caller}
+        language={language}
+        agentName={agentName}
+        phase={agent ? "ready" : "research"}
+        onStart={() => setStarted(true)}
+      />
     );
   }
 
@@ -320,21 +327,35 @@ function CallRoom({
   const { mode } = useAgentMode();
   const { conversation, sendUserMessage } = useAgentConversation();
   const { micActive, micMuted, setMicMuted, getInputVolume } = useAgentMicrophone();
-  const { getOutputVolume } = useAgentPlayer();
+  const { getOutputVolume, setOutputMuted } = useAgentPlayer();
   const [volume, setVolume] = useState(0);
   const [ending, setEnding] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [wrapUp, setWrapUp] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [userMuted, setUserMuted] = useState(false);
   const intakeRef = useRef<Intake | null>(null);
   const endingRef = useRef(false);
   const heardClosingRef = useRef(false);
+  const savingLockedRef = useRef(false);
+  const savingStartedRef = useRef<number | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const kickedOffRef = useRef(false);
+
+  const beginSaving = () => {
+    if (savingStartedRef.current == null) savingStartedRef.current = Date.now();
+    setSaving(true);
+  };
 
   useAgentClientTool("save_intake", async (fn) => {
     const parsed = intakeSchema.safeParse(JSON.parse(fn.arguments || "{}"));
     if (!parsed.success) {
-      return JSON.stringify({ ok: false, error: "invalid_intake" });
+      return JSON.stringify({
+        ok: false,
+        error: "invalid_intake",
+        next: "Keep speaking. Ask the next interview question. Do not end the call.",
+      });
     }
     const response = await fetch(`/api/conversations/${conversationId}/intake`, {
       method: "POST",
@@ -342,12 +363,18 @@ function CallRoom({
       body: JSON.stringify(parsed.data),
     });
     if (!response.ok) {
-      return JSON.stringify({ ok: false });
+      return JSON.stringify({
+        ok: false,
+        next: "Keep speaking. Ask the next interview question. Do not end the call.",
+      });
     }
     const body = (await response.json()) as { intake?: Intake };
     intakeRef.current = body.intake ?? parsed.data;
     setWrapUp(true);
-    return JSON.stringify({ ok: true });
+    return JSON.stringify({
+      ok: true,
+      next: "If you already spoke the closing line, stay silent. Otherwise speak the next question.",
+    });
   });
 
   useAgentClientTool("search_web", async (fn) => {
@@ -437,6 +464,9 @@ function CallRoom({
     endingRef.current = true;
     onLeaving?.();
     setEnding(true);
+    beginSaving();
+    setOutputMuted(true);
+    setUserMuted(true);
     const messages = transcriptPayload(conversation);
     endPayloadRef.current = {
       messages,
@@ -462,43 +492,95 @@ function CallRoom({
     } catch {
       drafted = null;
     }
-    onEnded(result !== undefined ? result : intakeRef.current ?? drafted);
+    const elapsed = Date.now() - (savingStartedRef.current ?? Date.now());
+    const remain = 1_000 - elapsed;
+    if (remain > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, remain));
+    }
+    onEnded(intakeRef.current ?? drafted ?? result ?? null);
   };
 
   useEffect(() => {
+    if (endingRef.current) return;
+
+    const last = lastAssistantText(conversation);
+    const closing = isClosingThanks(last);
+    if (mode === "speaking" && closing) heardClosingRef.current = true;
+
+    const lineFinished = heardClosingRef.current && closing && mode !== "speaking";
+    const announcedSave = /speichere das memo|save the memo/i.test(last);
+    if (lineFinished && !savingLockedRef.current) {
+      if (!announcedSave) {
+        const handle = window.setTimeout(() => {
+          if (modeRef.current === "speaking") return;
+          savingLockedRef.current = true;
+          setUserMuted(true);
+          setOutputMuted(true);
+          beginSaving();
+          persistTurns(liveTurns(conversation));
+        }, 700);
+        return () => window.clearTimeout(handle);
+      }
+      savingLockedRef.current = true;
+      setUserMuted(true);
+      setOutputMuted(true);
+      beginSaving();
+      persistTurns(liveTurns(conversation));
+    }
+
+    if (savingLockedRef.current) {
+      const delay = wrapUp ? 200 : 8_000;
+      const handle = window.setTimeout(() => {
+        persistTurns(liveTurns(conversation));
+        void hangUp(intakeRef.current);
+      }, delay);
+      return () => window.clearTimeout(handle);
+    }
+
     if (!wrapUp) return;
     persistTurns(liveTurns(conversation));
 
-    if (mode === "thinking" || mode === "speaking") {
-      if (mode === "speaking") heardClosingRef.current = true;
-      return;
-    }
+    if (mode === "thinking" || mode === "speaking") return;
 
-    const last = lastAssistantText(conversation);
     if (isOpenClosingTurn(last)) {
       setUserMuted(false);
       return;
     }
 
     setUserMuted(true);
-    const closingDone =
-      heardClosingRef.current && (mode === "listening" || mode === "idle");
-    const delay = closingDone ? 900 : heardClosingRef.current ? 9000 : 12_000;
     const handle = window.setTimeout(() => {
       persistTurns(liveTurns(conversation));
       void hangUp(intakeRef.current);
-    }, delay);
+    }, 12_000);
     return () => window.clearTimeout(handle);
-    // hangUp closes over latest latency/stop; wrap-up should track speech and last turn.
+    // hangUp closes over latest latency/stop; wrap-up should track speech and the last turn.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional wrap-up watcher
-  }, [wrapUp, mode, conversation]);
+  }, [wrapUp, mode, conversation, saving, setOutputMuted]);
 
   const labels = MODE_LABEL[language];
   const callReady =
     micActive || mode === "speaking" || Boolean(startError || connectError);
 
+  if (saving || ending) {
+    return (
+      <CallPrep
+        caller={caller}
+        language={language}
+        agentName={agentName}
+        phase="saving"
+      />
+    );
+  }
+
   if (!callReady) {
-    return <CallPrep caller={caller} language={language} agentName={agentName} />;
+    return (
+      <CallPrep
+        caller={caller}
+        language={language}
+        agentName={agentName}
+        phase="connecting"
+      />
+    );
   }
 
   return (

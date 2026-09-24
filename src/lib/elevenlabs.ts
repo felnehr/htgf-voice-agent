@@ -87,6 +87,26 @@ function pickPremadeFallback(voices: Voice[]): Voice | undefined {
   return premade[0];
 }
 
+export async function elevenLabsHasQuota(apiKey: string): Promise<boolean> {
+  try {
+    const response = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
+      headers: { "xi-api-key": apiKey },
+      cache: "no-store",
+    });
+    if (!response.ok) return true;
+    const data = (await response.json()) as {
+      character_count?: number;
+      character_limit?: number;
+    };
+    if (typeof data.character_limit !== "number" || typeof data.character_count !== "number") {
+      return true;
+    }
+    return data.character_count < data.character_limit;
+  } catch {
+    return true;
+  }
+}
+
 export async function resolveElevenLabsVoice(): Promise<ResolvedVoice> {
   if (cachedVoice) return cachedVoice;
 
@@ -124,15 +144,16 @@ export function buildElevenLabsSpeak(
   apiKey: string,
   language: "de" | "en",
 ) {
-  const languageCode = language === "de" ? "de" : "en";
   return {
     provider: {
       type: "eleven_labs" as const,
       model_id: MODEL_ID,
-      language_code: language === "de" ? "de" : "en-US",
+      // ISO 639-1. `en-US` is ignored by ElevenLabs, so the model guesses from the text.
+      // `provider.language` is in the newer spec, but the live parser rejects it on agent.speak.
+      language_code: language,
     },
     endpoint: {
-      url: `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/multi-stream-input?language_code=${languageCode}`,
+      url: `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/multi-stream-input?language_code=${language}`,
       headers: {
         "xi-api-key": apiKey,
       },

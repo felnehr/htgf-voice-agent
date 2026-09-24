@@ -224,25 +224,13 @@ export function CallerApp() {
 
       {phase === "done" && caller ? (
         <div className="flex flex-1 flex-col gap-10 pb-16">
-          <div className="flex max-w-xl flex-col gap-4">
-            <p className="text-sm font-medium text-muted-foreground">
-              {german ? "Aufgenommen" : "Recorded"}
-            </p>
-            <h1 className="font-heading text-4xl leading-[1.05] tracking-tight text-pretty sm:text-5xl">
+          {!intake ? (
+            <p className="font-serif max-w-xl text-lg leading-snug text-muted-foreground">
               {german
-                ? `Danke für das Gespräch, ${caller.name}.`
-                : `Thank you for the call, ${caller.name}.`}
-            </h1>
-            <p className="font-serif max-w-md text-lg leading-snug text-muted-foreground">
-              {intake
-                ? german
-                  ? "Die Angaben sind festgehalten. Wenn etwas nicht stimmt, tippe auf Memo bearbeiten."
-                  : "Your details are on record. If something is off, tap Edit memo."
-                : german
-                  ? "Das Gespräch ist gespeichert. Der Agent hat noch kein Memo hinterlegt — tippe auf Memo bearbeiten, um die Felder selbst auszufüllen."
-                  : "The call is saved. The agent has not filed a memo yet — tap Edit memo to fill in the fields yourself."}
+                ? "Das Gespräch ist gespeichert. Der Agent hat noch kein Memo hinterlegt — tippe auf Memo bearbeiten, um die Felder selbst auszufüllen."
+                : "The call is saved. The agent has not filed a memo yet — tap Edit memo to fill in the fields yourself."}
             </p>
-          </div>
+          ) : null}
           {conversationId ? (
             <section className="rounded-[2rem] bg-card px-7 py-8 sm:px-10">
               <IntakeEditor

@@ -42,5 +42,5 @@ Bonus used: `save_intake`, pre-call Tavily briefing, optional `search_web`, stre
 - Boost STT with Flux **keyterms**: company, names, `Pre-Seed`, `Seed`, `Series A`, `HTGF`.
 - After asking about the round, treat Proceed/Preceed/Pri-Seed as **Pre-Seed**.
 - One spoken turn = short acknowledgement + **one** question. Do not skip **next step**. Do not invent it.
-- After the next step, say the required picture is complete, then offer **one** optional extra. After that answer — add or decline — `save_intake` immediately. Do not ask again. Do not follow up on the extra. Store it in `additionalInfo` (empty if they decline).
+- After the next step, say the required picture is complete, then offer **one** optional extra. After that answer — add or decline — one closing line: thank them and say you will save the memo now. Call `save_intake` in that same turn. Do not speak again. The screen then shows a short saving state, then the memo. Do not ask again. Do not follow up on the extra. Store it in `additionalInfo` (empty if they decline).
 - Do not enable Flux eager EOT for this interview: it caused missing user turns and double agent replies.
